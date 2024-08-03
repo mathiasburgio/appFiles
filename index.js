@@ -29,7 +29,7 @@ const corsOptions = {
         }
     }
 };
-app.use(cors(corsOptions));
+server.use(cors(corsOptions));
 server.use(formidableMiddleware())
 server.use(session({
     secret: 'mateflix-asd-123',
