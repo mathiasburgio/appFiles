@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>cdn.mateflix</title>
+    <link rel="icon" type="image/x-icon" href="/resources/icon.ico">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" integrity="sha384-xOolHFLEh07PJGoPkLv1IbcEPTNtaed2xpHsD9ESMhqIYd0nLMwNLD69Npy4HI+N" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="/styles/styles.css">
+</head>
+<body>
+    <div class="app p-3">
+        <header>
+
+        </header>
+        <main>
+            <article name="login">
+                <div class="card">
+                    <div class="card-header">
+                        Iniciar sesión
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label for="">Email</label>
+                            <input type="email" class="form-control" autocomplete="off" name="email">
+                        </div>
+                        <div class="form-group">
+                            <label for="">Contraseña</label>
+                            <input type="password" class="form-control" autocomplete="off" name="contrasena">
+                        </div>
+                        <div class="text-right">
+                            <button class="btn btn-primary" name="iniciar-sesion">Iniciar sesión</button>
+                        </div>
+                    </div>
+                </div>
+            </article>
+            <article name="gestion" class="d-none">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between">
+                            <span>Gestionar</span>
+                            <button class="btn btn-danger btn-sm" name="cerrar-sesion">Cerrar sesión</button>
+                        </div>
+                    </div>
+                    <div class="card-body row">
+                        <article class="col-12" style="height: 75vh; overflow-y: scroll;">
+                            <div class="input-group mb-3">
+                                <div class="input-group-prepend">
+                                    <button class="btn btn-sm btn-warning" name="ir-al-directorio-superior" style="min-width: 40px;"><i class="fas fa-left-long"></i></button>
+                                    <select name="directorio-raiz" class="form-control" style="border-radius: 0;">
+                                        <option value="/public">/public</option>
+                                        <option value="/private">/private</option>
+                                    </select>
+                                </div>
+                                <input type="text" class="form-control bg-white" readonly name="ruta-actual">
+                                <div class="input-group-append">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" ${item.type != "file" && "disabled"} class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+                                            Acciones
+                                        </button>
+                                        <div class="dropdown-menu">
+                                            <a class="dropdown-item" href="#" name="subir-archivo">Subir archivo/s</a>
+                                            <a class="dropdown-item" href="#" name="crear-directorio">Crear directorio</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border">
+                                <table class="table table-sm m-0">
+                                    <thead>
+                                        <tr class="thead-dark">
+                                            <th></th>
+                                            <th>Archivo</th>
+                                            <th class="text-right">Tamaño</th>
+                                            <th class="text-right">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </article>
+                    </div>
+                </div>
+            </article>
+        </main>
+        <footer>
+
+        </footer>
+    </div>
+    <div id="modales" class="d-none">
+        <div id="modal_subir_archivos">
+            <div class="row">
+                <div class="col-5">
+                    <div class="form-group">
+                        <label for=""><b>1.</b> Seleccionar archivo/s</label>
+                        <input type="file" name="archivo" multiple="true" class="form-control-file form-control-sm">
+                    </div>
+                </div>
+                <div class="col-5">
+                    <div class="form-group">
+                        <label for=""><b>2.</b> Elegir estrategia</label>
+                        <select name="irrepetible" class="form-control form-control-sm">
+                            <option disabled selected>-SELECCIONAR-</option>
+                            <option value="1">Renombrar (nombre irrepetible)</option>
+                            <option value="0">Matener el nombre</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-2">
+                    <div class="form-group">
+                        <label for=""><b>3.</b> Subir</label>
+                        <button class="btn btn-sm btn-primary btn-block" name="subir">Subir</button>
+                    </div>
+                </div>
+            </div>
+            <ul class="list-group">
+            </ul>
+        </div>
+    </div>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js" integrity="sha384-9/reFTGAW83EW2RDu2S0VKaIzap3H66lZH81PoYlFhbGU+6BZp6G7niu735Sk7lN" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js" integrity="sha384-+sLIOodYLS7CIrQpBjl+C7nPvqq+FbNUBDunl/OZv93DB7Ln/533i8e/mZXLi/P+" crossorigin="anonymous"></script>
+    
+    <script src="/resources/Modal.js"></script>
+    <script src="/resources/Fechas.js"></script>
+    <script src="/resources/DropdownSearcher.js"></script>
+    
+    <script src="/scripts/script.js"></script>
+</body>
+</html>
