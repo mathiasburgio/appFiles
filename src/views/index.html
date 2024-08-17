@@ -71,7 +71,8 @@
                                     <thead>
                                         <tr class="thead-dark">
                                             <th></th>
-                                            <th>Archivo</th>
+                                            <th>Tipo</th>
+                                            <th>Nombre</th>
                                             <th class="text-right">Tamaño</th>
                                             <th class="text-right">Acciones</th>
                                         </tr>
@@ -116,6 +117,21 @@
             </div>
             <ul class="list-group">
             </ul>
+        </div>
+        <div id="modal_descomprimir">
+            <div class="form-group">
+                <label for="">Descomprimir en</label>
+                <input type="text" name="nombre" class="form-control">
+                <small class="text-muted">Dejar vacio el nombre para que descomprima sin crear carpeta</small>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <button class="btn btn-danger btn-block" name="cancelar">Cancelar</button>
+                </div>
+                <div class="col">
+                    <button class="btn btn-primary btn-block" name="descomprimir">Descomprimir</button>
+                </div>
+            </div>
         </div>
     </div>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>

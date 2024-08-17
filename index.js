@@ -11,14 +11,16 @@ const cors = require("cors");
 const favicon = require('serve-favicon');
 const { v4: uuidv4 } = require('uuid');
 const fechas = require("./src/resources/Fechas");
+const unzipper = require("unzipper");
+const archiver = require('archiver');
 
 let folders_passwords = {};
 
 require('dotenv').config({path:'./.env'})
 
 // Lista de dominios permitidos
-const allowedDomains = ['https://mateflix.app'];
-if(process.env.NODE_ENV == 'development') allowedDomains.push("http://localhost");
+const allowedDomains = ['*'];
+if(process.env.NODE_ENV == 'development') allowedDomains.push("http://localhost", "http://localhost:4000", "localhost");
 
 const corsOptions = {
     origin: (origin, callback) => {
@@ -202,7 +204,7 @@ server.post(["/upload", "/upload/:privateKey"], async(req, res)=>{
         res.json({error: true, message: err.toString()});
     }
 });
-server.post("/rename-file", async(req, res)=>{
+server.post("/rename", async(req, res)=>{
     try{
         if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
         let oldPath = req.fields.oldPath;
@@ -216,17 +218,87 @@ server.post("/rename-file", async(req, res)=>{
         res.json({error: true, message: err.toString()});
     }
 });
-server.post("/delete-file", async(req, res)=>{
+server.post("/delete", async(req, res)=>{
     try{
         if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const filepath = req.fields.filepath;
-        if(isValidName(filepath) == false) throw "Ruta no válida";
-        let ret = await fs.promises.unlink( path.join(__dirname, filepath) );
+        const removePath = req.fields.removePath;
+        const password = req.fields.password;
+        const type = req.fields.type;
+        if(isValidName(removePath) == false) throw "Ruta no válida";
+        let ret = null;
+        if(type=="directory"){
+            if(process.env.ADMIN_CONTRASENA != password) throw "Contraseña no válida";
+            ret = await fs.promises.rm( path.join(__dirname, removePath) , {recursive: true, force: true});
+        }else{
+            ret = await fs.promises.unlink( path.join(__dirname, removePath) );
+        }
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});
     }
 });
+server.post("/unzip", async(req, res)=>{
+    try{
+        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
+        const finalPath = req.fields.finalPath;
+        const zipPath = req.fields.zipPath;
+        if(isValidName(finalPath) == false) throw "Ruta final no válida";
+        if(isValidName(zipPath) == false) throw "Ruta zip no válida";
+        
+        const zip = await unzipper.Open.file( path.join(__dirname, zipPath) );
+        if(fs.existsSync( path.join(__dirname, finalPath) ) == false) fs.mkdirSync( path.join(__dirname, finalPath) );
+        await zip.extract({ path: path.join(__dirname, finalPath) })
+        res.json({message: "OK"});
+    }catch(err){
+        res.json({error: true, message: err.toString()});
+    } 
+})
+server.post("/zip", async(req, res)=>{
+    try{
+        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
+        let GLOBAL_PATH = req.fields.GLOBAL_PATH;//directorio base
+        let zipName = req.fields.zipName;//nombre del zip resultante
+        let fileNames = JSON.parse(req.fields?.fileNames || "[]");//archivos a comprimir
+        
+
+        if(isValidName(GLOBAL_PATH) == false) throw "GLOBAL_PATH no válido";
+        if(isValidName(zipName) == false) throw "zipName no válido";
+        if(zipName.endsWith(".zip") == false) zipName = zipName + ".zip";
+
+        const output = fs.createWriteStream( path.join(__dirname, GLOBAL_PATH, zipName) );
+        const archive = archiver('zip', {
+            zlib: { level: 9 } // Sets the compression level.
+        });
+
+        // Asociar la salida del archivo al stream de escritura
+        archive.pipe(output);
+
+        archive.on('error', function(err) {
+            throw err;
+        });
+        
+        // Agregar los archivos al ZIP
+        fileNames.forEach(filePath => {
+            let px = path.join(__dirname, GLOBAL_PATH, filePath);
+            if (fs.lstatSync(px).isDirectory()) {
+                // Si es un directorio, agregar todo su contenido
+                archive.directory(px, path.basename(px));
+            } else {
+                // Si es un archivo, agregarlo directamente
+                archive.file(px, { name: filePath });
+            }
+        });
+
+        
+
+        // Finalizar la creación del ZIP
+        archive.finalize();
+
+        res.json({message: "OK"});
+    }catch(err){
+        res.json({error: true, message: err.toString()});
+    } 
+})
 server.get(["/list-folder", "/list-folder/:privateKey"], async(req, res)=>{
     try{
         if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
@@ -280,29 +352,6 @@ server.post("/create-folder", async(req, res)=>{
             }
         }
         let ret = await fs.promises.mkdir(path.join(__dirname, folderPath));
-        res.json({message: "OK"});
-    }catch(err){
-        res.json({error: true, message: err.toString()});
-    }
-});
-server.post("/rename-folder", async(req, res)=>{
-    try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const oldPath = req.fields.oldPath;
-        const newPath = req.fields.newPath;
-        if(isValidName(oldPath) == false || isValidName(newPath) == false) throw "Ruta no válida";
-        let ret = await fs.promises.rename(oldPath, newPath);
-        res.json({message: "OK"});
-    }catch(err){
-        res.json({error: true, message: err.toString()});
-    }
-});
-server.post("/delete-folder", async(req, res)=>{
-    try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const dirpath = req.fields.dirpath;
-        if(isValidName(dirpath) == false) throw "Ruta no válida";
-        let ret = await fs.promises.rm(dirpath, {recursive: true});
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});
