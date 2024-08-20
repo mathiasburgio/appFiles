@@ -191,8 +191,6 @@ server.post("/login", loginLimiter, async (req, res)=>{
         const email = (req.fields.email || "").toString().toLowerCase();
         const contrasena = (req.fields.contrasena || "");
         const user = JSON.parse( fs.readFileSync(".user") );
-        const _email = process.env.ADMIN_EMAIL;
-        const _contrasena = process.env.ADMIN_CONTRASENA;
 
         if(email === user.email && await bcrypt.compare(contrasena, user.password)){
             req.session.admin = true;
@@ -366,7 +364,6 @@ server.post("/zip", requireAuth, async(req, res)=>{
 })
 server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req, res)=>{
     try{
-        console.log(req.session);
         if(req?.session?.admin != true && process.env.ENABLE_GET_LIST != "true") throw "operación no permitida";
         let GLOBAL_PATH = req.query.GLOBAL_PATH;
         let fullPath = path.join(__dirname, GLOBAL_PATH);
