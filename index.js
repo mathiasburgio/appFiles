@@ -13,10 +13,21 @@ const { v4: uuidv4 } = require('uuid');
 const fechas = require("./src/resources/Fechas");
 const unzipper = require("unzipper");
 const archiver = require('archiver');
+const rateLimit = require('express-rate-limit');
+const bcrypt = require('bcrypt');
+const { randomUUID } = require("crypto");
 
-let folders_passwords = {};
+
+//gestiona el contador para hacer archivos "irrepetibles"
+let irrepetibleCounter = 0;
 
 require('dotenv').config({path:'./.env'})
+
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 5, // Limita a 5 intentos por IP
+    message: "Demasiados intentos de login. Intente nuevamente más tarde."
+});
 
 // Lista de dominios permitidos
 const allowedDomains = ['*'];
@@ -39,7 +50,7 @@ server.use(session({
     saveUninitialized: false,
     cookie: {
         maxAge : (86400 * 1000),//la sesion dura 24hs
-        //secure : !(process.env.NODE_ENV == 'development') // true ssl
+        secure : process.env.NODE_ENV != 'development' // true ssl
     },
     store: new FileStore({logFn: function(){}})//loFn: ... es para q no joda buscando sessiones q han sido cerradas
 }));
@@ -54,45 +65,53 @@ server.use("/resources", express.static(__dirname + "/src/resources"));
 const isValidName = (str) =>{
     if(str.indexOf("..") > -1) return false;
     if(str.indexOf(" ") > -1) return false;
+    if(str.indexOf("~") > -1) return false;
     if(str == "") return false;
     if(typeof str != "string") return false;
+    return true;
 }
+const isValidPath = (base="public", userPath="") => {
+    let basePath = path.join(__dirname, base);
+    userPath = userPath.replaceAll("/", "\\");//cambia a formato unix
+    const resolvedPath = path.resolve(basePath, userPath);
+    if(resolvedPath.indexOf("~") > -1) return false;
+    return resolvedPath.startsWith(basePath);
+};
 const checkSession = (req) => {
     return (req?.session?.admin == true);
 }
 const checkPrivateKey = (req) =>{
     return (req?.fields?.privateKey === process.env.PRIVATE_KEY || req?.params?.privateKey === process.env.PRIVATE_KEY);
 }
+const requireAuth = (req, res, next) =>{
+    if (!checkSession(req) && !checkPrivateKey(req)) {
+        return res.status(403).json({ error: "Acceso no autorizado" });
+    }
+    next();
+}
 const checkFiles = async () => {
     let _private = path.join(__dirname, "private");
     let _public = path.join(__dirname, "public");
-    let _private_password = path.join(__dirname, "private", "password.json");
 
     let private = fs.existsSync( _private );
     let public = fs.existsSync( _public );
-    let private_password = fs.existsSync( _private_password );
 
     if(private == false) await fs.promises.mkdir( _private );
     if(public == false) await fs.promises.mkdir( _public );
-    if(private_password == false) await fs.promises.writeFile( _private_password, JSON.stringify("{}") );
 
-    folders_passwords = JSON.parse(await fs.promises.readFile( _private_password, "utf-8" ));
+    if(fs.existsSync( path.join(__dirname, ".irrepetibleCounter") )){
+        let aux = fs.readFileSync( path.join(__dirname, ".irrepetibleCounter"), "utf-8");
+        irrepetibleCounter = parseInt(aux) || 0;
+    }else{
+        fs.writeFileSync( path.join(__dirname, ".irrepetibleCounter"), "0");
+    }
 }
 const sanitizeFileName = async (directory, fileName, hacerIrrepetible=true) =>{
-    console.log("dir",directory);
-    let cuentaArchivos = 0;
-    try{
-        if(hacerIrrepetible){
-            let contador = await fs.promises.readFile( path.join(directory, "__counter.txt") , "utf-8");
-            console.log("count", contador);
-            cuentaArchivos = parseInt(contador) + 1;
-            await fs.promises.writeFile(path.join(directory, "__counter.txt"), cuentaArchivos.toString());
-        }
-    }catch(err){
-        cuentaArchivos = 0;
-        await fs.promises.writeFile(path.join(directory, "__counter.txt"), cuentaArchivos.toString());
+    if(hacerIrrepetible){
+        irrepetibleCounter++;
+        await fs.promises.writeFile(path.join(__dirname, ".irrepetibleCounter"), irrepetibleCounter.toString());
     }
-
+    
     // Divide el nombre del archivo y la extensión
     const parts = fileName.split('.');
     let extension = null;
@@ -107,11 +126,10 @@ const sanitizeFileName = async (directory, fileName, hacerIrrepetible=true) =>{
     const sanitized = name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
 
     let ret = sanitized;
-    if(hacerIrrepetible) ret = (ret + "_" + cuentaArchivos);
+    if(hacerIrrepetible) ret = (ret + "_" + irrepetibleCounter);
     if(extension) ret = (ret + "." + extension);
     return ret;
 }
-
 server.get("/ping", (req, res)=>{
     res.send("pong");
     res.end();
@@ -124,52 +142,63 @@ server.get(["/", "/index", "/index.html"], (req, res)=>{
     }
     res.sendFile( path.join(__dirname, "src", "views", "index.html") );
 })
-
-//url /private?filename=folder/hello.txt?password=asd123
-server.get("/private", async(req, res)=>{
+server.get("/create-user", async(req, res)=>{
     try{
-        const password = (req.query.password || "no-password-sended").toString();
-        const filename = (req.query.filename || "no-filename-sended").toString();
-    
-        if(isValidName(folderPath) == false || isValidName(fileName) == false) throw "Ruta no válida";
-        const finalPath = path.join(__dirname, "private", folderPath, fileName);
-        if( folders_passwords?.[folderPath] == password ){
-            res.sendFile(finalPath, (err)=>{
-                if(err) res.json({error: true, message: "Archivo no encontrado" });
-            });
+        if(fs.existsSync(".user") == false){
+            const email = (req.query?.email || "").toString().trim();
+            const password = (req.query?.password || "").toString().trim();
+            if(!email) throw "Email no válido";
+            if(!password) throw "Password no válido";
+
+            const hashedPassword = await bcrypt.hash(password, 10);
+            fs.writeFileSync(".user", JSON.stringify({email, password: hashedPassword}));
+            res.json({message: "Usuario creado con éxito"});
         }else{
-            throw "Contraseña no válida";
+            throw "Ya existe un usuario";
         }
     }catch(err){
-        res.json({error: true, message: err.toString() });
+        console.log(err);
+        res.json({error: true, message: err.toString()});
     }
-})
-server.post("/private", async(req, res)=>{
+});
 
-})
-
-let banderaLogin = false;
-
-//este timer limpia el antispam
-setInterval(()=>{
-    banderaLogin = false;
-}, 1000 * 60);
-
-server.post("/login", (req, res)=>{
+// /server?guid_private_access=${guid}&srcFile=${path}
+server.get("/private", async(req, res)=>{
     try{
-        if(banderaLogin == true) throw "Spam detectado, intente nuevamente en unos instantes";
+        if(process.env.ENABLE_PRIVATE_GET != "true") throw "disabled get";
 
+        let guid_private_access = (req.query?.guid_private_access || "").toString().trim();
+        let srcFile = (req.query?.srcFile || "").toString().trim();
+        
+        if( process.env.GUID_PRIVATE_ACCESS != guid_private_access) throw "Clave no valida";
+        
+        if(srcFile.indexOf(" ") > -1) throw "srcFile no valido(cod1)";
+        if(srcFile.indexOf("..") > -1) throw "srcFile no valido(cod3)";
+        if(srcFile.indexOf("~") > -1) throw "srcFile no valido(cod4)";
+        
+        let filePath = path.join(__dirname, "private", srcFile);
+        if( isValidPath("private", filePath) == false) throw "srcFile no valido(cod5)";
+
+        res.sendFile( filePath );
+    }catch(err){
+        res.send("recurso no encontrado");
+        res.end();
+        console.log(err);
+    }
+});
+server.post("/login", loginLimiter, async (req, res)=>{
+    try{
         const email = (req.fields.email || "").toString().toLowerCase();
         const contrasena = (req.fields.contrasena || "");
+        const user = JSON.parse( fs.readFileSync(".user") );
         const _email = process.env.ADMIN_EMAIL;
         const _contrasena = process.env.ADMIN_CONTRASENA;
 
-        if(email === _email && contrasena === _contrasena){
+        if(email === user.email && await bcrypt.compare(contrasena, user.password)){
             req.session.admin = true;
             req.session.save();
             res.json({message: "OK"});
         }else{
-            banderaLogin = true;
             throw "Combinación no válida";
         }
     }catch(err){
@@ -184,88 +213,121 @@ server.get("/logout", (req, res)=>{
     req.session.destroy();
     res.redirect("/");
 });
-server.post(["/upload", "/upload/:privateKey"], async(req, res)=>{
+server.post("/upload", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const folderPath = req.fields.folderPath;
-        if(isValidName(folderPath) == false) throw "Ruta no válida";
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        if(isValidName(GLOBAL_PATH) == false) throw "Ruta no válida (código 1)";
         const files = req.files;
         const irrepetible = (req.fields?.irrepetible.toString() === "1");
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
         let newFiles = [];
         for(let file in files){
             let f = files[file];
-            let newName = await sanitizeFileName( path.join(__dirname, folderPath), f.name, irrepetible);
-            let newPath = path.join(__dirname, folderPath, newName);
+            let newName = await sanitizeFileName( path.join(__dirname, GLOBAL_PATH), f.name, irrepetible);
+            let newPath = path.join(__dirname, GLOBAL_PATH, newName);
+            if(isValidPath(base, newPath) == false) throw "Ruta no válida (código 3)";
             let ret = await fs.promises.rename(f.path, newPath);
             newFiles.push(newName);
         }
         res.json({message: "OK", newFiles: newFiles});
     }catch(err){
+        console.log(err);
         res.json({error: true, message: err.toString()});
     }
 });
-server.post("/rename", async(req, res)=>{
+server.post("/rename", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        let oldPath = req.fields.oldPath;
-        let newPath = req.fields.newPath;
-        if(isValidName(oldPath) == false || isValidName(newPath) == false) throw "Ruta no válida";
-        oldPath = path.join(__dirname, oldPath);
-        newPath = path.join(__dirname, newPath);
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        let oldName = req.fields.oldName;
+        let newName = req.fields.newName;
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+        if(isValidName(oldName) == false || isValidName(newName) == false) throw "Ruta no válida";
+        let oldPath = path.join(__dirname, GLOBAL_PATH, oldName);
+        let newPath = path.join(__dirname, GLOBAL_PATH, newName);
+        if(isValidPath(base, oldPath) == false) throw "Ruta no válida (código 3)";
+        if(isValidPath(base, newPath) == false) throw "Ruta no válida (código 3)";
         let ret = await fs.promises.rename(oldPath, newPath);
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});
     }
 });
-server.post("/delete", async(req, res)=>{
+server.post("/delete", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const removePath = req.fields.removePath;
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        const files = JSON.parse(req.fields.files || "[]");
         const password = req.fields.password;
-        const type = req.fields.type;
-        if(isValidName(removePath) == false) throw "Ruta no válida";
-        let ret = null;
-        if(type=="directory"){
-            if(process.env.ADMIN_CONTRASENA != password) throw "Contraseña no válida";
-            ret = await fs.promises.rm( path.join(__dirname, removePath) , {recursive: true, force: true});
-        }else{
-            ret = await fs.promises.unlink( path.join(__dirname, removePath) );
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+
+        if(Array.isArray(files) == false) throw "Selección no válida";
+        if(files.length > 1 && process.env.ADMIN_CONTRASENA != password) throw "Contraseña no válida";
+
+        for(let file of files){
+            console.log(file);
+            let fullPath = path.join( __dirname, GLOBAL_PATH, file);
+            if(isValidName(fullPath) == false) throw "Ruta no válida (código 1)";
+            if(isValidPath(base, fullPath) == false) throw "Ruta no válida (código 2)";
+            const stats = await fs.promises.stat(fullPath);
+            if( stats.isDirectory() ){
+                ret = await fs.promises.rm( fullPath , {recursive: true, force: true});
+            }else{
+                ret = await fs.promises.unlink( fullPath );
+            } 
         }
+
+        if(private) fs.promises.writeFile( path.join(__dirname, ".privateSecret"), JSON.stringify(privateSecret));
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});
     }
 });
-server.post("/unzip", async(req, res)=>{
+server.post("/unzip", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const finalPath = req.fields.finalPath;
-        const zipPath = req.fields.zipPath;
-        if(isValidName(finalPath) == false) throw "Ruta final no válida";
-        if(isValidName(zipPath) == false) throw "Ruta zip no válida";
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        const zipName = req.fields.zipName;
+        const folder = (req.fields?.folder || "").toString();
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
         
-        const zip = await unzipper.Open.file( path.join(__dirname, zipPath) );
-        if(fs.existsSync( path.join(__dirname, finalPath) ) == false) fs.mkdirSync( path.join(__dirname, finalPath) );
-        await zip.extract({ path: path.join(__dirname, finalPath) })
+        const zipPath = path.join(__dirname, GLOBAL_PATH, zipName);
+        const finalPath = path.join(__dirname, GLOBAL_PATH, folder);
+        
+        if(isValidName(zipPath) == false) throw "Ruta zip no válida";
+        if(isValidName(finalPath) == false) throw "Ruta final no válida";
+        if(isValidPath(base, zipPath) == false) throw "Ruta zip no válida (cod 2)";
+        if(isValidPath(base, finalPath) == false) throw "Ruta final no válida (cod 2)";
+        
+        const zip = await unzipper.Open.file( zipPath );
+        if(fs.existsSync( finalPath ) == false) fs.mkdirSync( finalPath );
+        for(let entry of zip.files){
+            const extractedPath = path.resolve(finalPath, entry.path);
+            if(isValidName(extractedPath) == false) throw "Ruta zip no válida (cod 3)";
+            if(extractedPath.startsWith(finalPath) == false) throw "Ruta zip no válida (cod 4)";
+        }
+        await zip.extract({ path: finalPath })
         res.json({message: "OK"});
     }catch(err){
+        console.log(err);
         res.json({error: true, message: err.toString()});
     } 
 })
-server.post("/zip", async(req, res)=>{
+server.post("/zip", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
         let GLOBAL_PATH = req.fields.GLOBAL_PATH;//directorio base
         let zipName = req.fields.zipName;//nombre del zip resultante
         let fileNames = JSON.parse(req.fields?.fileNames || "[]");//archivos a comprimir
-        
+        let fullPath = path.join(__dirname, GLOBAL_PATH, zipName);
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
 
-        if(isValidName(GLOBAL_PATH) == false) throw "GLOBAL_PATH no válido";
-        if(isValidName(zipName) == false) throw "zipName no válido";
-        if(zipName.endsWith(".zip") == false) zipName = zipName + ".zip";
+        if(isValidName(fullPath) == false) throw "GLOBAL_PATH no válido";
+        if(isValidPath(base, fullPath) == false) throw "zipName no válido";
+        if(fullPath.endsWith(".zip") == false) fullPath = fullPath + ".zip";
 
-        const output = fs.createWriteStream( path.join(__dirname, GLOBAL_PATH, zipName) );
+        const output = fs.createWriteStream( fullPath );
         const archive = archiver('zip', {
             zlib: { level: 9 } // Sets the compression level.
         });
@@ -280,6 +342,9 @@ server.post("/zip", async(req, res)=>{
         // Agregar los archivos al ZIP
         fileNames.forEach(filePath => {
             let px = path.join(__dirname, GLOBAL_PATH, filePath);
+            if(isValidName(px) == false) throw "error cod 1";
+            if(isValidPath(base, px) == false) throw "error cod 2";
+
             if (fs.lstatSync(px).isDirectory()) {
                 // Si es un directorio, agregar todo su contenido
                 archive.directory(px, path.basename(px));
@@ -299,16 +364,19 @@ server.post("/zip", async(req, res)=>{
         res.json({error: true, message: err.toString()});
     } 
 })
-server.get(["/list-folder", "/list-folder/:privateKey"], async(req, res)=>{
+server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        let folderPath = req.query.folderPath;
-        if(isValidName(folderPath) == false) throw "Ruta no válida";
-        folderPath = path.join(__dirname, folderPath);
-        let files = await fs.promises.readdir(folderPath);
+        if(req?.session?.admin != true && process.env.ENABLE_GET_LIST != "true") throw "operación no permitida";
+        let GLOBAL_PATH = req.query.GLOBAL_PATH;
+        let fullPath = path.join(__dirname, GLOBAL_PATH);
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+        if(isValidName(fullPath) == false) throw "Ruta no válida";
+        if(isValidPath(base, fullPath) == false && isValidPath(false, fullPath) == false) throw "Ruta no válida";
+        let files = await fs.promises.readdir( fullPath );
 
         const fileDetailsPromises = files.map(async (file) => {
-            const filePath = path.join(folderPath, file);
+            const filePath = path.join(fullPath, file);
 
             try {
                 const stats = await fs.promises.stat(filePath);
@@ -336,22 +404,17 @@ server.get(["/list-folder", "/list-folder/:privateKey"], async(req, res)=>{
         res.json({error: true, message: err.toString()});
     }
 })
-server.post("/create-folder", async(req, res)=>{
+server.post("/create-folder", requireAuth, async(req, res)=>{
     try{
-        if(checkSession(req) == false && checkPrivateKey(req)) throw "Usuario no válido";
-        const folderPath = req.fields.folderPath + "/" + req.fields.folderName;
-        if(isValidName(folderPath) == false) throw "Ruta no válida";
-        if(folderPath.indexOf("/private") === 0){
-            const password = (req.fields?.password || "no-password").toString();
-            if(typeof folders_passwords?.[folderPath] != "undefined"){
-                throw "El directorio ya existe";
-            }else{
-                folders_passwords[folderPath] = password;
-                let ret = await fs.promises.mkdir(folderPath);
-                let ret2 = await fs.promises.writeFile( path.join(__dirname, "private", "password.json"), JSON.stringify(folders_passwords) );
-            }
-        }
-        let ret = await fs.promises.mkdir(path.join(__dirname, folderPath));
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        const name = req.fields.name;
+        const finalPath = path.join(__dirname, GLOBAL_PATH, name);
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+        
+        if(isValidName(finalPath) == false) throw "Ruta no válida";
+        if(isValidPath(base, finalPath) == false) throw "Ruta no válida";
+        let ret = await fs.promises.mkdir( finalPath );
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});
@@ -364,4 +427,4 @@ server.use((req, res, next) => {
 const httpServer = http.createServer(server);
 httpServer.listen(4000);
 checkFiles();//verifica las carpetas principales y carga contraseñas
-console.log(`Listen 4000 # ${fechas.getNow(true)}`);
+console.log(`Listen 4000 # ${fechas.getNow(true)} # http://localhost:4000 (Ctrl + click)`);

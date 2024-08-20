@@ -54,23 +54,18 @@
                                     </select>
                                 </div>
                                 <input type="text" class="form-control bg-white" readonly name="ruta-actual">
-                                <div class="input-group-append">
-                                    <div class="btn-group btn-group-sm" role="group">
-                                        <button type="button" ${item.type != "file" && "disabled"} class="btn btn-primary dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
-                                            Acciones
-                                        </button>
-                                        <div class="dropdown-menu">
-                                            <a class="dropdown-item" href="#" name="subir-archivo">Subir archivo/s</a>
-                                            <a class="dropdown-item" href="#" name="crear-directorio">Crear directorio</a>
-                                        </div>
-                                    </div>
-                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <button class="btn btn-outline-secondary" name="crear-directorio"><i class="fas fa-folder text-warning"></i> Crear directorio</button>
+                                <button class="btn btn-outline-secondary ml-2" name="subir-archivo"><i class="fas fa-file text-primary"></i> Subir archivo/s</button>
+                                <button class="btn btn-outline-secondary ml-2" disabled name="comprimir-seleccion"><i class="fas fa-file-zipper text-info"></i> Comprimir</button>
+                                <button class="btn btn-outline-secondary ml-2" disabled name="eliminar-seleccion"><i class="fas fa-trash text-danger"></i> Eliminar</button>
                             </div>
                             <div class="border">
                                 <table class="table table-sm m-0">
                                     <thead>
                                         <tr class="thead-dark">
-                                            <th></th>
+                                            <th style="width: 40px;"></th>
                                             <th>Tipo</th>
                                             <th>Nombre</th>
                                             <th class="text-right">Tamaño</th>
@@ -80,6 +75,7 @@
                                     <tbody></tbody>
                                 </table>
                             </div>
+                            <small class="text-muted" name="contador">Directorios: ? - Archivos: ?</small>
                         </article>
                     </div>
                 </div>
