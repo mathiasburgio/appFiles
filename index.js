@@ -35,7 +35,7 @@ if(process.env.NODE_ENV == 'development') allowedDomains.push("http://localhost"
 
 const corsOptions = {
     origin: (origin, callback) => {
-        if (allowedDomains.indexOf(origin) !== -1 || !origin) {
+        if (allowedDomains.indexOf(origin) !== -1 || !origin || allowedDomains.includes("*")) {
             callback(null, true);
         } else {
             callback(new Error('Not allowed by CORS'));
@@ -171,7 +171,7 @@ server.get("/private", async(req, res)=>{
         let srcFile = (req.query?.srcFile || "").toString().trim();
         
         if( process.env.GUID_PRIVATE_ACCESS != guid_private_access) throw "Clave no valida";
-        
+
         if(srcFile.indexOf(" ") > -1) throw "srcFile no valido(cod1)";
         if(srcFile.indexOf("..") > -1) throw "srcFile no valido(cod3)";
         if(srcFile.indexOf("~") > -1) throw "srcFile no valido(cod4)";
