@@ -366,6 +366,7 @@ server.post("/zip", requireAuth, async(req, res)=>{
 })
 server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req, res)=>{
     try{
+        console.log(req.session);
         if(req?.session?.admin != true && process.env.ENABLE_GET_LIST != "true") throw "operación no permitida";
         let GLOBAL_PATH = req.query.GLOBAL_PATH;
         let fullPath = path.join(__dirname, GLOBAL_PATH);
