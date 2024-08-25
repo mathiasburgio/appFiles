@@ -9,3 +9,14 @@ Al clonar este repositorio, debes copiar (o reemplazar) el archivo `.env_example
 ## Crear usuario
 
 Ingresar a `dominio.com/create-user?email=someone@gmail.com&password=123asd` y cambie `email` y `password` con las credenciales que va a utilizar para ingresar al panel. En caso de querer editar el usuario borre el archivo `.user`.  
+
+## Como utilizar la API
+
+Para cualquier consulta `POST` se debe utilizar el parametro `privateKey` que debe ser igual al que se encuentra en `.env`
+
+## Funciones
+
+1.  POST /upload
+>GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula
+>files //array de archivos
+>irrepetible //1 ó 0 (def 0);
