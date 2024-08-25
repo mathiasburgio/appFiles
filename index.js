@@ -234,6 +234,23 @@ server.post("/upload", requireAuth, async(req, res)=>{
         res.json({error: true, message: err.toString()});
     }
 });
+server.post("/save-text-file", requireAuth, async(req, res)=>{
+    try{
+        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        let fileName = req.fields.fileName;
+        let content = (req.fields?.content || "").toString();
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+        if(isValidName(fileName) == false) throw "Ruta no válida";
+        let fullPath = path.join(__dirname, GLOBAL_PATH, fileName);
+        if(isValidPath(base, fullPath) == false) throw "Ruta no válida (código 3)";
+        fs.writeFileSync( fullPath, content);
+        res.json({message: "OK"});
+    }catch(err){
+        console.log(err);
+        res.json({error: true, message: err.toString()});
+    }
+});
 server.post("/rename", requireAuth, async(req, res)=>{
     try{
         const GLOBAL_PATH = req.fields.GLOBAL_PATH;
@@ -412,7 +429,7 @@ server.post("/create-folder", requireAuth, async(req, res)=>{
         
         if(isValidName(finalPath) == false) throw "Ruta no válida";
         if(isValidPath(base, finalPath) == false) throw "Ruta no válida";
-        let ret = await fs.promises.mkdir( finalPath );
+        if(fs.existsSync( finalPath ) == false) await fs.promises.mkdir( finalPath );
         res.json({message: "OK"});
     }catch(err){
         res.json({error: true, message: err.toString()});

@@ -179,7 +179,7 @@ const listarDirectorio = async (ruta) =>{
         $("[name='comprimir-seleccion']").prop("disabled", seleccionados.length <= 0);
         $("[name='eliminar-seleccion']").prop("disabled", seleccionados.length <= 0);
     })
-    $("table tbody [ind]").dblclick(ev=>{
+    $("table tbody [ind]").dblclick(async ev=>{
         let row = $(ev.currentTarget);
         let ind = row.attr("ind");
         let item = GLOBAL_LISTADO[ind];
@@ -187,7 +187,19 @@ const listarDirectorio = async (ruta) =>{
         if(item.type == "directory"){
             listarDirectorio(GLOBAL_PATH + "/" + item.name);
         }else{
-            let w = window.open(GLOBAL_PATH + "/" + item.name, "_BLANK");
+            let ext = item.name.split(".").at(-1).toLowerCase();
+            if(["png", "jpg", "jpeg", "gif", "webp"].includes(ext)){
+                modal.mostrar({
+                    titulo: item.name,
+                    cuerpo: `<img src='${GLOBAL_PATH + "/" + item.name}' style='max-width:100%; max-height: 60vh'>`,
+                    tamano: "modal-lg",
+                    botones: "volver"
+                })
+            }else if(["js", "txt", "json", "conf", "html", "css"].includes(ext)){
+                modalEditor(item);
+            }else{
+                let w = window.open(GLOBAL_PATH + "/" + item.name, "_BLANK");
+            }
         }
     })
     const getData = (event) => {
@@ -404,6 +416,59 @@ const renombrar = async (data) =>{
     }else{
         listarDirectorio(GLOBAL_PATH);
     }
+}
+const modalEditor = async (item) => {
+    let ext = item.name.split(".").at(-1).toLowerCase();
+    let fox = `
+    <textarea class='editor'></textarea>
+    <div class='text-right mt-2'>
+        <button class='btn btn-secondary' name='volver'>Volver</button>
+        <button class='btn btn-success' name='guardar'>Guardar</button>
+    </div>`
+    modal.mostrar({
+        titulo: item.name,
+        cuerpo: fox,
+        tamano: "modal-xl",
+        footer: false
+    })
+    let modes = {
+        js: "javascript", 
+        html: "htmlmixed",
+        css: "css",
+        php: "php",
+        sql: "sql",
+        json: "javascript",
+        conf: "javascript",
+        txt: "javascript"
+    }
+    const editor = CodeMirror.fromTextArea(document.querySelector('#modal .editor'), {
+        mode: modes[ext],  // Cambia según el tipo de archivo
+        lineNumbers: true,
+        theme: "material",  // Aplica el tema oscuro
+    });
+
+    const response = await fetch(GLOBAL_PATH + "/" + item.name);
+    const fileContent = await response.text();
+    setTimeout(()=> editor.setValue(fileContent), 250);
+    $("#modal .CodeMirror").css("height", "70vh");
+
+    $("#modal [name='volver']").click(()=>modal.ocultar());
+    $("#modal [name='guardar']").click(async ev=>{
+        let ele = $(ev.currentTarget);
+        let resp = await modal.addAsyncPopover({querySelector: ele, message: "¿Confirma guardar los cambios?", type: "yesno"});
+        if(!resp) return;
+        $.post({
+            url: "/save-text-file",
+            data: {
+                GLOBAL_PATH: GLOBAL_PATH,
+                fileName: item.name,
+                content: editor.getValue()
+            }
+        })
+        modal.ocultar(()=>{
+            modal.mensaje("¡Guardado con éxito!");
+        })
+    });
 }
 
 window.onload = () => {
