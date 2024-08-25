@@ -18,40 +18,45 @@ Tambien todas las consultas requieren el parametro `GLOBAL_PATH` haciendo refere
 ## API endpoints
 
 .  POST /upload  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >files //array de archivos  
 >irrepetible //1 ó 0 (def 0);
 
 .  POST /rename  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >oldName //string
 >newName //string
 
 .  POST /delete  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >files //array de nombres de archivos  
 >password //string requerido para borrar carpetas ó mas de 1 archivo a la vez
 
 .  POST /unzip  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >zipName //string nombre del archivo
 >folder //string nombre del directorio donde se descomprimira. Si no existe se crea, si esta vacio se descomprime en el mismo directorio de GLOBAL_PATH
 
 .  POST /zip  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >zipName //string nombre del archivo una vez zipeado  
 >fileNames //array de nombres de archivos  
 
 .  GET /list-folder/:privateKey?GLOBAL_PATH  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
->files //array de archivos  
->irrepetible //1 ó 0 (def 0);
+>devuelve los archivos y directorios dentro del GLOBAL_PATH
 
 .  POST /create-folder  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >name //string
 
 .  POST /save-text-file  
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>privateKey  
+>GLOBAL_PATH  
 >fileName //string
 >content //string
