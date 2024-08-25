@@ -12,11 +12,51 @@ Ingresar a `dominio.com/create-user?email=someone@gmail.com&password=123asd` y c
 
 ## Como utilizar la API
 
-Para cualquier consulta `POST` se debe utilizar el parametro `privateKey` que debe ser igual al que se encuentra en `.env`
+Para cualquier consulta `POST` se debe utilizar el parametro `privateKey` que debe ser igual al que se encuentra en `.env`  
+Tambien todas las consultas requieren el parametro `GLOBAL_PATH` haciendo referencia a la carpeta en la cual se trabajará y deberá comenzar con "/public" ó "/private"
 
-## Funciones
+## API endpoints
 
-1.  POST /upload
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula
->files //array de archivos
+.  POST /upload  
+>privateKey  
+>GLOBAL_PATH  
+>files //array de archivos  
 >irrepetible //1 ó 0 (def 0);
+
+.  POST /rename  
+>privateKey  
+>GLOBAL_PATH  
+>oldName //string
+>newName //string
+
+.  POST /delete  
+>privateKey  
+>GLOBAL_PATH  
+>files //array de nombres de archivos  
+>password //string requerido para borrar carpetas ó mas de 1 archivo a la vez
+
+.  POST /unzip  
+>privateKey  
+>GLOBAL_PATH  
+>zipName //string nombre del archivo
+>folder //string nombre del directorio donde se descomprimira. Si no existe se crea, si esta vacio se descomprime en el mismo directorio de GLOBAL_PATH
+
+.  POST /zip  
+>privateKey  
+>GLOBAL_PATH  
+>zipName //string nombre del archivo una vez zipeado  
+>fileNames //array de nombres de archivos  
+
+.  GET /list-folder/:privateKey?GLOBAL_PATH  
+>devuelve los archivos y directorios dentro del GLOBAL_PATH
+
+.  POST /create-folder  
+>privateKey  
+>GLOBAL_PATH  
+>name //string
+
+.  POST /save-text-file  
+>privateKey  
+>GLOBAL_PATH  
+>fileName //string
+>content //string
