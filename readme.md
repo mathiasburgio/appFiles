@@ -16,7 +16,7 @@ Para cualquier consulta `POST` se debe utilizar el parametro `privateKey` que de
 
 ## Funciones
 
-1.  POST /upload
->GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula
->files //array de archivos
->irrepetible //1 ó 0 (def 0);
+1.  POST /upload  
+>GLOBAL_PATH //empezando con `/public` (ó `/private`) notese mayuscula  
+>files //array de archivos  
+>irrepetible //1 ó 0 (def 0);  
