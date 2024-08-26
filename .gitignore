@@ -2,6 +2,7 @@
 /private
 /public
 /sessions
+/temp
 .env
 .user
 .irrepetibleCounter
