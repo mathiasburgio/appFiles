@@ -4,7 +4,7 @@ const express = require("express");
 const server = express();
 const path = require("path");
 const fs = require("fs");
-const formidableMiddleware = require("express-formidable");
+//const formidableMiddleware = require("express-formidable");
 const session = require("express-session");
 const FileStore = require('session-file-store')(session);
 const cors = require("cors");
@@ -16,7 +16,8 @@ const archiver = require('archiver');
 const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcrypt');
 const { randomUUID } = require("crypto");
-
+const multer =  require("multer");
+const upload = multer({ dest: 'temp/' }); // Directorio de subida
 
 //gestiona el contador para hacer archivos "irrepetibles"
 let irrepetibleCounter = 0;
@@ -24,10 +25,18 @@ let irrepetibleCounter = 0;
 require('dotenv').config({path:'./.env'})
 
 const loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutos
+    windowMs: 60 * 1000, // 1 minuto
     max: 5, // Limita a 5 intentos por IP
     message: "Demasiados intentos de login. Intente nuevamente más tarde."
 });
+const getPrivateFilesLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minuto
+    max: 5,
+    message: "Demasiados intentos de login. Intente nuevamente más tarde.",
+    skip: (req) => {
+        return req?.session?.admin == true || req.query.privateKey == process.env.GUID_PRIVATE_ACCESS;
+    }
+})
 
 // Lista de dominios permitidos
 const allowedDomains = ['*'];
@@ -43,7 +52,11 @@ const corsOptions = {
     }
 };
 server.use(cors(corsOptions));
-server.use(formidableMiddleware())
+// Analizar cuerpos de solicitud en formato JSON
+server.use(express.json());
+// Analizar cuerpos de solicitud con datos de formularios clásicos (URL-encoded)
+server.use(express.urlencoded({ extended: true }));
+//server.use(formidableMiddleware())
 server.use(session({
     secret: 'mateflix-asd-123',
     resave: true,
@@ -81,7 +94,7 @@ const checkSession = (req) => {
     return (req?.session?.admin == true);
 }
 const checkPrivateKey = (req) =>{
-    return (req?.fields?.privateKey === process.env.PRIVATE_KEY || req?.params?.privateKey === process.env.PRIVATE_KEY);
+    return (req?.fields?.privateKey === process.env.PRIVATE_KEY || req?.body?.privateKey === process.env.PRIVATE_KEY || req?.params?.privateKey === process.env.PRIVATE_KEY);
 }
 const requireAuth = (req, res, next) =>{
     if (!checkSession(req) && !checkPrivateKey(req)) {
@@ -92,12 +105,15 @@ const requireAuth = (req, res, next) =>{
 const checkFiles = async () => {
     let _private = path.join(__dirname, "private");
     let _public = path.join(__dirname, "public");
+    let _temp = path.join(__dirname, "temp");
 
     let private = fs.existsSync( _private );
     let public = fs.existsSync( _public );
+    let temp = fs.existsSync( _temp );
 
     if(private == false) await fs.promises.mkdir( _private );
     if(public == false) await fs.promises.mkdir( _public );
+    if(temp == false) await fs.promises.mkdir( _temp );
 
     if(fs.existsSync( path.join(__dirname, ".irrepetibleCounter") )){
         let aux = fs.readFileSync( path.join(__dirname, ".irrepetibleCounter"), "utf-8");
@@ -123,7 +139,7 @@ const sanitizeFileName = async (directory, fileName, hacerIrrepetible=true) =>{
     const name = parts.join('.');
 
     // Reemplazar espacios con guiones medios y eliminar caracteres no alfanuméricos (excepto guiones medios)
-    const sanitized = name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9-]/g, '');
+    const sanitized = name.replace(/\s+/g, '-').replace(/[^a-zA-Z0-9\-\_]/g, '');
 
     let ret = sanitized;
     if(hacerIrrepetible) ret = (ret + "_" + irrepetibleCounter);
@@ -163,7 +179,7 @@ server.get("/create-user", async(req, res)=>{
 });
 
 // /server?guid_private_access=${guid}&srcFile=${path}
-server.get("/private", async(req, res)=>{
+server.get("/private", getPrivateFilesLimiter, async(req, res)=>{
     try{
         if(process.env.ENABLE_PRIVATE_GET != "true") throw "disabled get";
 
@@ -181,15 +197,30 @@ server.get("/private", async(req, res)=>{
 
         res.sendFile( filePath );
     }catch(err){
-        res.send("recurso no encontrado");
+        res.send("Clave no válida o recurso no encontrado");
         res.end();
-        console.log(err);
     }
 });
-server.post("/login", loginLimiter, async (req, res)=>{
+server.get("/private/*", requireAuth, async(req, res)=>{
     try{
-        const email = (req.fields.email || "").toString().toLowerCase();
-        const contrasena = (req.fields.contrasena || "");
+        const filePath = path.join(__dirname, 'private', req.params[0]);
+
+        // Verifica si el archivo existe
+        if (fs.existsSync(filePath)) {
+            return res.sendFile(filePath);
+        } else {
+            return res.status(404).json({ message: 'Archivo no encontrado' });
+        }
+    }catch(err){
+        res.send("Clave no válida o recurso no encontrado");
+        res.end();
+    }
+});
+server.post("/login", upload.any(), loginLimiter, async (req, res)=>{
+    try{
+        console.log(req.body);
+        const email = (req.body.email || "").toString().toLowerCase();
+        const contrasena = (req.body.contrasena || "");
         const user = JSON.parse( fs.readFileSync(".user") );
 
         if(email === user.email && await bcrypt.compare(contrasena, user.password)){
@@ -211,18 +242,22 @@ server.get("/logout", (req, res)=>{
     req.session.destroy();
     res.redirect("/");
 });
-server.post("/upload", requireAuth, async(req, res)=>{
+//la autenticacion de usuario la hago intermanete
+server.post(["/upload", "/upload-multiple"], upload.any(), async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
+        if( checkSession(req) == false && checkPrivateKey(req) == false) throw "Usuario no válido";
+        
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
         if(isValidName(GLOBAL_PATH) == false) throw "Ruta no válida (código 1)";
         const files = req.files;
-        const irrepetible = (req.fields?.irrepetible.toString() === "1");
+        const replaceName = (req.body?.newName || "").toString(); 
+        const irrepetible = ((req.body?.irrepetible || "0").toString() === "1");
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
         let newFiles = [];
         for(let file in files){
             let f = files[file];
-            let newName = await sanitizeFileName( path.join(__dirname, GLOBAL_PATH), f.name, irrepetible);
+            let newName = await sanitizeFileName( path.join(__dirname, GLOBAL_PATH), (replaceName || f.originalname), irrepetible);
             let newPath = path.join(__dirname, GLOBAL_PATH, newName);
             if(isValidPath(base, newPath) == false) throw "Ruta no válida (código 3)";
             let ret = await fs.promises.rename(f.path, newPath);
@@ -236,9 +271,9 @@ server.post("/upload", requireAuth, async(req, res)=>{
 });
 server.post("/save-text-file", requireAuth, async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
-        let fileName = req.fields.fileName;
-        let content = (req.fields?.content || "").toString();
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
+        let fileName = req.body.fileName;
+        let content = (req.body?.content || "").toString();
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
         if(isValidName(fileName) == false) throw "Ruta no válida";
@@ -253,9 +288,9 @@ server.post("/save-text-file", requireAuth, async(req, res)=>{
 });
 server.post("/rename", requireAuth, async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
-        let oldName = req.fields.oldName;
-        let newName = req.fields.newName;
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
+        let oldName = req.body.oldName;
+        let newName = req.body.newName;
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
         if(isValidName(oldName) == false || isValidName(newName) == false) throw "Ruta no válida";
@@ -271,9 +306,9 @@ server.post("/rename", requireAuth, async(req, res)=>{
 });
 server.post("/delete", requireAuth, async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
-        const files = JSON.parse(req.fields.files || "[]");
-        const password = req.fields.password;
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
+        const files = JSON.parse(req.body.files || "[]");
+        const password = req.body.password;
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
 
@@ -301,9 +336,9 @@ server.post("/delete", requireAuth, async(req, res)=>{
 });
 server.post("/unzip", requireAuth, async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
-        const zipName = req.fields.zipName;
-        const folder = (req.fields?.folder || "").toString();
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
+        const zipName = req.body.zipName;
+        const folder = (req.body?.folder || "").toString();
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
         
@@ -331,9 +366,9 @@ server.post("/unzip", requireAuth, async(req, res)=>{
 })
 server.post("/zip", requireAuth, async(req, res)=>{
     try{
-        let GLOBAL_PATH = req.fields.GLOBAL_PATH;//directorio base
-        let zipName = req.fields.zipName;//nombre del zip resultante
-        let fileNames = JSON.parse(req.fields?.fileNames || "[]");//archivos a comprimir
+        let GLOBAL_PATH = req.body.GLOBAL_PATH;//directorio base
+        let zipName = req.body.zipName;//nombre del zip resultante
+        let fileNames = JSON.parse(req.body?.fileNames || "[]");//archivos a comprimir
         let fullPath = path.join(__dirname, GLOBAL_PATH, zipName);
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
@@ -421,8 +456,8 @@ server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req,
 })
 server.post("/create-folder", requireAuth, async(req, res)=>{
     try{
-        const GLOBAL_PATH = req.fields.GLOBAL_PATH;
-        const name = req.fields.name;
+        const GLOBAL_PATH = req.body.GLOBAL_PATH;
+        const name = req.body.name;
         const finalPath = path.join(__dirname, GLOBAL_PATH, name);
         const private = GLOBAL_PATH.startsWith("/private");
         const base = private ? "private" : "public";
