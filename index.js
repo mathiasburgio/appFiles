@@ -29,14 +29,6 @@ const loginLimiter = rateLimit({
     max: 5, // Limita a 5 intentos por IP
     message: "Demasiados intentos de login. Intente nuevamente más tarde."
 });
-const getPrivateFilesLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minuto
-    max: 5,
-    message: "Demasiados intentos de login. Intente nuevamente más tarde.",
-    skip: (req) => {
-        return req?.session?.admin == true || req.query.privateKey == process.env.GUID_PRIVATE_ACCESS;
-    }
-})
 
 // Lista de dominios permitidos
 const allowedDomains = ['*'];
@@ -94,7 +86,7 @@ const checkSession = (req) => {
     return (req?.session?.admin == true);
 }
 const checkPrivateKey = (req) =>{
-    return (req?.fields?.privateKey === process.env.PRIVATE_KEY || req?.body?.privateKey === process.env.PRIVATE_KEY || req?.params?.privateKey === process.env.PRIVATE_KEY);
+    return (req?.fields?.privateKey === process.env.PRIVATE_KEY || req?.body?.privateKey === process.env.PRIVATE_KEY);
 }
 const requireAuth = (req, res, next) =>{
     if (!checkSession(req) && !checkPrivateKey(req)) {
@@ -158,50 +150,7 @@ server.get(["/", "/index", "/index.html"], (req, res)=>{
     }
     res.sendFile( path.join(__dirname, "src", "views", "index.html") );
 })
-server.get("/create-user", async(req, res)=>{
-    try{
-        if(fs.existsSync(".user") == false){
-            const email = (req.query?.email || "").toString().trim();
-            const password = (req.query?.password || "").toString().trim();
-            if(!email) throw "Email no válido";
-            if(!password) throw "Password no válido";
-
-            const hashedPassword = await bcrypt.hash(password, 10);
-            fs.writeFileSync(".user", JSON.stringify({email, password: hashedPassword}));
-            res.json({message: "Usuario creado con éxito"});
-        }else{
-            throw "Ya existe un usuario";
-        }
-    }catch(err){
-        console.log(err);
-        res.json({error: true, message: err.toString()});
-    }
-});
-
-// /server?guid_private_access=${guid}&srcFile=${path}
-server.get("/private", getPrivateFilesLimiter, async(req, res)=>{
-    try{
-        if(process.env.ENABLE_PRIVATE_GET != "true") throw "disabled get";
-
-        let guid_private_access = (req.query?.guid_private_access || "").toString().trim();
-        let srcFile = (req.query?.srcFile || "").toString().trim();
-        
-        if( process.env.GUID_PRIVATE_ACCESS != guid_private_access) throw "Clave no valida";
-
-        if(srcFile.indexOf(" ") > -1) throw "srcFile no valido(cod1)";
-        if(srcFile.indexOf("..") > -1) throw "srcFile no valido(cod3)";
-        if(srcFile.indexOf("~") > -1) throw "srcFile no valido(cod4)";
-        
-        let filePath = path.join(__dirname, "private", srcFile);
-        if( isValidPath("private", filePath) == false) throw "srcFile no valido(cod5)";
-
-        res.sendFile( filePath );
-    }catch(err){
-        res.send("Clave no válida o recurso no encontrado");
-        res.end();
-    }
-});
-server.get("/private/*", requireAuth, async(req, res)=>{
+server.get(["/private", "/private/*"], requireAuth, async(req, res)=>{
     try{
         const filePath = path.join(__dirname, 'private', req.params[0]);
 
@@ -218,12 +167,10 @@ server.get("/private/*", requireAuth, async(req, res)=>{
 });
 server.post("/login", upload.any(), loginLimiter, async (req, res)=>{
     try{
-        console.log(req.body);
         const email = (req.body.email || "").toString().toLowerCase();
         const contrasena = (req.body.contrasena || "");
-        const user = JSON.parse( fs.readFileSync(".user") );
 
-        if(email === user.email && await bcrypt.compare(contrasena, user.password)){
+        if(email === process.env.EMAIL && contrasena === process.env.PASSWORD){
             req.session.admin = true;
             req.session.save();
             res.json({message: "OK"});
@@ -414,9 +361,17 @@ server.post("/zip", requireAuth, async(req, res)=>{
         res.json({error: true, message: err.toString()});
     } 
 })
-server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req, res)=>{
+server.get("/list-folder", requireAuth, async(req, res)=>{
     try{
         if(req?.session?.admin != true && process.env.ENABLE_GET_LIST != "true") throw "operación no permitida";
+        
+        let page = Number(req?.query?.page || 0);
+        let itemsPerPage = 100;
+        let sortedBy = req?.query?.sortedBy || null; //name || birthday || size || lastChangeTime
+        let search = req?.query?.search || ""; //compare with sortedBy (sortedBy = null compare with index). example: startFrom=someFile.json || startFrom=2010-01-01         
+        
+        console.log({itemsPerPage, page, sortedBy, search});
+
         let GLOBAL_PATH = req.query.GLOBAL_PATH;
         let fullPath = path.join(__dirname, GLOBAL_PATH);
         const private = GLOBAL_PATH.startsWith("/private");
@@ -425,6 +380,7 @@ server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req,
         if(isValidPath(base, fullPath) == false && isValidPath(false, fullPath) == false) throw "Ruta no válida";
         let files = await fs.promises.readdir( fullPath );
 
+        //obtengo metadata de archivos
         const fileDetailsPromises = files.map(async (file) => {
             const filePath = path.join(fullPath, file);
 
@@ -433,6 +389,8 @@ server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req,
                 
                 return {
                     name: file,
+                    birthtime: stats.birthtime,
+                    lastChangeTime: stats.mtime,
                     type: stats.isDirectory() ? 'directory' : 'file',
                     size: stats.isFile() ? ((stats.size / 1024).toFixed(2) + "KB") : 'N/A' // Tamaño solo para archivos
                 };
@@ -449,7 +407,33 @@ server.get(["/list-folder", "/list-folder/:privateKey"], requireAuth, async(req,
         // Esperar a que todas las promesas se resuelvan
         const fileDetails = await Promise.all(fileDetailsPromises);
 
-        res.json({message: "OK", fileDetails});
+        //ordeno
+        if(sortedBy == "name"){
+            fileDetails.sort((a, b) => a.name.localeCompare(b.name));
+        }else if(sortedBy == "birthday"){
+            fileDetails.sort((a, b) => b.birthtime - a.birthtime);
+        }else if(sortedBy == "lastChangeTime"){
+            fileDetails.sort((a, b) => b.lastChangeTime - a.lastChangeTime);
+        }else if(sortedBy == "size"){
+            fileDetails.sort((a, b) => Number(b.size) - Number(a.lastChangeTime));
+        }
+
+        let ret = [];
+        let pageDelta = itemsPerPage * page;
+        let coincidences = 0;
+        fileDetails.forEach((file, index)=>{
+            if(ret.length >= itemsPerPage) return; //omito si ta termine los items por pagina
+            if(!search || file.name.indexOf(search) > -1){ 
+                coincidences++;
+                if(pageDelta > 0){
+                    pageDelta--;// Saltar elementos de páginas anteriores
+                }else{
+                    ret.push(file);// Agregar al resultado si ya estamos en la página actual
+                }
+            }
+        })
+
+        res.json({message: "OK", fileDetails: ret, coincidences});
     }catch(err){
         res.json({error: true, message: err.toString()});
     }
