@@ -138,6 +138,21 @@ const sanitizeFileName = async (directory, fileName, hacerIrrepetible=true) =>{
     if(extension) ret = (ret + "." + extension);
     return ret;
 }
+const simpleString = (str = "", noSpaces = false) => {
+    str = ("" + str).toLowerCase().trim();
+    str = str.replaceAll("á", "a");
+    str = str.replaceAll("é", "e");
+    str = str.replaceAll("í", "i");
+    str = str.replaceAll("ó", "o");
+    str = str.replaceAll("ú", "u");
+    str = str.replaceAll("ñ", "n");
+    str = str.replace(/[^a-z0-9 -\.]/gi, '').toLowerCase().trim();
+    if(noSpaces){
+        return str.replaceAll(" ", "-")
+    }else{
+        return str
+    }
+}
 server.get("/ping", (req, res)=>{
     res.send("pong");
     res.end();
@@ -368,9 +383,9 @@ server.get("/list-folder", requireAuth, async(req, res)=>{
         let page = Number(req?.query?.page || 0);
         let itemsPerPage = 100;
         let sortedBy = req?.query?.sortedBy || null; //name || birthday || size || lastChangeTime
-        let search = req?.query?.search || ""; //compare with sortedBy (sortedBy = null compare with index). example: startFrom=someFile.json || startFrom=2010-01-01         
+        let search = simpleString(req?.query?.search || ""); //compare with sortedBy (sortedBy = null compare with index). example: startFrom=someFile.json || startFrom=2010-01-01         
         
-        console.log({itemsPerPage, page, sortedBy, search});
+        //console.log({itemsPerPage, page, sortedBy, search});
 
         let GLOBAL_PATH = req.query.GLOBAL_PATH;
         let fullPath = path.join(__dirname, GLOBAL_PATH);
@@ -423,7 +438,7 @@ server.get("/list-folder", requireAuth, async(req, res)=>{
         let coincidences = 0;
         fileDetails.forEach((file, index)=>{
             if(ret.length >= itemsPerPage) return; //omito si ta termine los items por pagina
-            if(!search || file.name.indexOf(search) > -1){ 
+            if(!search || simpleString(file.name).indexOf(search) > -1){ 
                 coincidences++;
                 if(pageDelta > 0){
                     pageDelta--;// Saltar elementos de páginas anteriores
