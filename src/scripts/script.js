@@ -4,6 +4,8 @@ var GLOBAL_DIRECTORIO_RAIZ = "/public";
 var GLOBAL_PATH = "/public";
 var GLOBAL_LISTADO = [];
 var seleccionados = [];
+var pagina = 0;
+var buscar = "";
 
 const bindEvents = () => {
     $("[name='iniciar-sesion']").click(ev=>{
@@ -17,10 +19,20 @@ const bindEvents = () => {
     });
     $("[name='ir-al-directorio-superior']").click(async ev=>{
         let aux = GLOBAL_PATH.substring(0, GLOBAL_PATH.lastIndexOf("/"))
-        if(aux != "") listarDirectorio(aux);
+        if(aux != ""){
+            pagina = 0;
+            buscar = "";
+            $("[name='pagina']").val(pagina);
+            $("[name='buscar']").val(buscar);
+            listarDirectorio(aux);
+        }
     });
     $("[name='directorio-raiz']").change(async ev=>{
         let v = $(ev.currentTarget).val();
+        pagina = 0;
+        buscar = "";
+        $("[name='pagina']").val(pagina);
+        $("[name='buscar']").val(buscar);
         GLOBAL_DIRECTORIO_RAIZ = v;
         listarDirectorio(v);
     });
@@ -36,6 +48,34 @@ const bindEvents = () => {
     $("[name='eliminar-seleccion']").click(ev=>{
         eliminar(seleccionados);
     });
+
+    $("[name='buscar']").keyup(ev=>{
+        let v = $("[name='buscar']").val();
+        if(ev.keyCode == 13){
+            buscar = v;
+            pagina = 0;
+            $("[name='pagina']").val(pagina);
+            listarDirectorio(GLOBAL_PATH);
+        }
+    })
+    $("[name='paginaAnterior']").click(ev=>{
+        pagina--;
+        if(pagina <= 0) pagina = 0;
+        $("[name='pagina']").val(pagina);
+        listarDirectorio(GLOBAL_PATH);
+    })
+    $("[name='paginaSiguiente']").click(ev=>{
+        pagina++;
+        $("[name='pagina']").val(pagina);
+        listarDirectorio(GLOBAL_PATH);
+    })
+    $("[name='pagina']").keyup(ev=>{
+        let ele = $(ev.currentTarget);
+        let v = parseInt(ele.val());
+        if(!v || v <= 0) v = 0;
+        ele.val(v);
+        if(ev.keyCode == 13) listarDirectorio(GLOBAL_PATH);
+    })
     
 
     if(window.location.href.indexOf("?admin") > -1){
@@ -85,10 +125,8 @@ const cerrarSesion = async () => {
 const listarDirectorio = async (ruta) =>{
     localStorage.setItem("lastPath", ruta);
     let ret = await $.get({
-        url: "/list-folder",
-        data: {
-            GLOBAL_PATH: ruta
-        }
+        url: `/list-folder?page=${pagina}&search=${buscar}&sortedBy=name`,
+        data: { GLOBAL_PATH: ruta }
     })
     seleccionados = [];
     $("[name='comprimir-seleccion']").prop("disabled", true);
@@ -186,6 +224,11 @@ const listarDirectorio = async (ruta) =>{
         let item = GLOBAL_LISTADO[ind];
 
         if(item.type == "directory"){
+            pagina = 0;
+            buscar = "";
+            $("[name='pagina']").val(pagina);
+            $("[name='buscar']").val("");
+
             listarDirectorio(GLOBAL_PATH + "/" + item.name);
         }else{
             let ext = item.name.split(".").at(-1).toLowerCase();

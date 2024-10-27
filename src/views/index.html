@@ -46,16 +46,23 @@
                         </div>
                     </div>
                     <div class="card-body row">
-                        <article class="col-12" style="height: 75vh; overflow-y: scroll;">
-                            <div class="input-group mb-3">
-                                <div class="input-group-prepend">
-                                    <button class="btn btn-sm btn-warning" name="ir-al-directorio-superior" style="min-width: 40px;"><i class="fas fa-left-long"></i></button>
-                                    <select name="directorio-raiz" class="form-control" style="border-radius: 0;">
-                                        <option value="/public">/public</option>
-                                        <option value="/private">/private</option>
-                                    </select>
+                        <article class="col-12" style="height: 85vh; overflow-y: scroll;">
+                            <div class="row mb-3">
+                                <div class="col">
+                                    <div class="input-group">
+                                        <div class="input-group-prepend">
+                                            <button class="btn btn-sm btn-warning" name="ir-al-directorio-superior" style="min-width: 40px;"><i class="fas fa-left-long"></i></button>
+                                            <select name="directorio-raiz" class="form-control" style="border-radius: 0;">
+                                                <option value="/public">/public</option>
+                                                <option value="/private">/private</option>
+                                            </select>
+                                        </div>
+                                        <input type="text" class="form-control bg-white" readonly name="ruta-actual">
+                                    </div>
                                 </div>
-                                <input type="text" class="form-control bg-white" readonly name="ruta-actual">
+                                <div class="col">
+                                    <input type="search" class="form-control" autocomplete="off" placeholder="Buscar + ENTER" name="buscar">
+                                </div>
                             </div>
                             <div class="mb-2">
                                 <button class="btn btn-outline-secondary" name="crear-directorio"><i class="fas fa-folder text-warning"></i> Crear directorio</button>
@@ -77,7 +84,26 @@
                                     <tbody></tbody>
                                 </table>
                             </div>
-                            <small class="text-muted" name="contador">Directorios: ? - Archivos: ?</small>
+                            <div class="row">
+                                <div class="col">
+                                    <small class="text-muted" name="contador">Directorios: ? - Archivos: ?</small>
+                                </div>
+                                <div class="col-auto">
+                                    <div class="input-group input-group-sm mt-1">
+                                        <div class="input-group-prepend">
+                                            <button class="btn btn-warning" name="paginaAnterior">
+                                                <i class="fas fa-left-long"></i>
+                                            </button>
+                                        </div>
+                                        <input type="number" style="width: 60px !important;" class="form-control text-center" name="pagina">
+                                        <div class="input-group-append">
+                                            <button class="btn btn-warning" name="paginaSiguiente">
+                                                <i class="fas fa-right-long"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </article>
                     </div>
                 </div>
