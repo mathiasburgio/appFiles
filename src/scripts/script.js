@@ -135,6 +135,7 @@ const listarDirectorio = async (ruta) =>{
                     <div class="dropdown-menu">
                         <a class="dropdown-item" href="#" name="abrir">Abrir</a>
                         <a class="dropdown-item" target="_blank" name="descargar" href="${GLOBAL_PATH + "/" + item.name}">Descargar</a>
+                        <a class="dropdown-item" href="#" name="obtenerUrl">Obtener URL</a>
                         <a class="dropdown-item" href="#" name="renombrar">Renombrar</a>
                         <a class="dropdown-item" href="#" name="descomprimir">Descomprimir</a>
                         <a class="dropdown-item text-danger" href="#" name="eliminar">Eliminar</a>
@@ -212,6 +213,21 @@ const listarDirectorio = async (ruta) =>{
     $("table tbody [ind] [name='abrir']").click(async ev=>{
         let data = getData(ev);
         listarDirectorio(GLOBAL_PATH + "/" + data.item.name);
+    });
+    $("table tbody [ind] [name='obtenerUrl']").click(async ev=>{
+        let data = getData(ev);
+        modal.mostrar({
+            titulo: "URL",
+            cuerpo: $("#modal_url_completa").html(),
+            tamano: "modal-lg",
+            botones: "aceptar"
+        })
+
+        $("#modal input").val(window.location.origin + GLOBAL_PATH + "/" + data.item.name);
+        $("#modal [name='copiar']").click(async ev=>{
+            let v = $("#modal input").val();
+            await navigator.clipboard.writeText(v);
+        })
     });
     $("table tbody [ind] [name='renombrar']").click(async ev=>{
         let data = getData(ev);
