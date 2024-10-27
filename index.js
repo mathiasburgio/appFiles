@@ -378,8 +378,6 @@ server.post("/zip", requireAuth, async(req, res)=>{
 })
 server.get("/list-folder", requireAuth, async(req, res)=>{
     try{
-        if(req?.session?.admin != true && process.env.ENABLE_GET_LIST != "true") throw "operación no permitida";
-        
         let page = Number(req?.query?.page || 0);
         let itemsPerPage = 100;
         let sortedBy = req?.query?.sortedBy || null; //name || birthday || size || lastChangeTime
