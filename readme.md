@@ -6,10 +6,6 @@ Este proyecto tiene como objetivo servir archivos estáticos, tanto de forma pú
 
 Al clonar este repositorio, debes copiar (o reemplazar) el archivo `.env_example` y renombrarlo a `.env`. Luego, reemplaza la información interna para adaptarla a tus necesidades.  
 
-## Crear usuario
-
-Ingresar a `dominio.com/create-user?email=someone@gmail.com&password=123asd` y cambie `email` y `password` con las credenciales que va a utilizar para ingresar al panel. En caso de querer editar el usuario borre el archivo `.user`.  
-
 ## Como utilizar la API
 
 Para cualquier consulta `POST` se debe utilizar el parametro `privateKey` que debe ser igual al que se encuentra en `.env`  
@@ -47,8 +43,15 @@ Tambien todas las consultas requieren el parametro `GLOBAL_PATH` haciendo refere
 >zipName //string nombre del archivo una vez zipeado  
 >fileNames //array de nombres de archivos  
 
-.  GET /list-folder/:privateKey?GLOBAL_PATH  
+.  GET /list-folder?GLOBAL_PATH  
 >devuelve los archivos y directorios dentro del GLOBAL_PATH
+
+ Se pueden agregar los siguientes parámetros en la query para personalizar la búsqueda:
+  
+  - `page`: número de página para la paginación de resultados.
+  - `itemsPerPage`: cantidad de elementos por página.
+  - `sortedBy`: criterio de ordenamiento (ej. `name`, `birthdate`, `lastChangeTime` ó `size`).
+  - `search`: término de búsqueda para filtrar archivos y directorios por nombre.
 
 .  POST /create-folder  
 >privateKey  
