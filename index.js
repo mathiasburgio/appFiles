@@ -451,6 +451,32 @@ server.get("/list-folder", requireAuth, async(req, res)=>{
         res.json({error: true, message: err.toString()});
     }
 })
+server.post("/request-backup", requireAuth, async(req, res)=>{
+    try{
+        let GLOBAL_PATH = req.body.GLOBAL_PATH;
+        let deltaBirthtime = fechas.parse2(req.body.birthtime, "USA_FECHA_HORA");//como se obtiene el listado ordebado por fecha de creacion, con este parametro se especifica la fecha del ultimo archivo backupeado para solo obtener los mas nuevos. backup incremental
+        let fullPath = path.join(__dirname, GLOBAL_PATH);
+        const private = GLOBAL_PATH.startsWith("/private");
+        const base = private ? "private" : "public";
+        if(isValidName(fullPath) == false) throw "Ruta no válida";
+        if(isValidPath(base, fullPath) == false && isValidPath(false, fullPath) == false) throw "Ruta no válida";
+        let items = await fs.promises.readdir( fullPath );
+        let files = [];
+        for (const item of items) {
+            const itemPath = path.join(fullPath, item);
+            const stat = await fs.promises.stat(itemPath);
+      
+            if (stat.isFile()) files.push({name: item, relativePath: GLOBAL_PATH + "/" + item, birthtime: stat.birthtime});
+        }
+
+        files = files.filter(file => fechas.parse2(file.birthtime, "USA_FECHA_HORA") > deltaBirthtime);
+        files.sort((a, b) => a.birthtime - b.birthtime);
+
+        res.json({ message: "OK", files });
+    }catch(err){
+        res.json({error: true, message: err.toString()});
+    }
+})
 server.post("/create-folder", requireAuth, async(req, res)=>{
     try{
         const GLOBAL_PATH = req.body.GLOBAL_PATH;
