@@ -469,7 +469,7 @@ server.post("/request-backup", requireAuth, async(req, res)=>{
             if (stat.isFile()) files.push({name: item, relativePath: GLOBAL_PATH + "/" + item, birthtime: stat.birthtime});
         }
 
-        files = files.filter(file => fechas.parse2(file.birthtime, "USA_FECHA_HORA") > deltaBirthtime);
+        files = files.filter(file => deltaBirthtime == 0 || fechas.parse2(file.birthtime, "USA_FECHA_HORA") > deltaBirthtime);
         files.sort((a, b) => a.birthtime - b.birthtime);
 
         res.json({ message: "OK", files });
