@@ -498,6 +498,7 @@ server.use((req, res, next) => {
 })
 
 const httpServer = http.createServer(server);
-httpServer.listen(4000);
+const port = process.env.PORT || 4000;
+httpServer.listen(port);
 checkFiles();//verifica las carpetas principales y carga contraseñas
-console.log(`Listen 4000 # ${fechas.getNow(true)} # http://localhost:4000 (Ctrl + click)`);
+console.log(`Listen # ${fechas.getNow(true)} # http://localhost:${port} (Ctrl + click)`);
